@@ -223,6 +223,23 @@ Public functions
 ***************************************************************************************************/
 
 
+void COAP_counter_callback(coapSessionStatus_t sessionStatus, uint8_t* pData, coapSession_t* pSession,
+                                 uint32_t dataLen){
+	   asm("nop");
+	   shell_write("Counter =");
+	  		  shell_writeN((char *) pData, dataLen);
+	  		  shell_write("from ");
+	  		  shell_writeN((char*) pSession->localAddr.addr32, 8);
+	  		 shell_write("\r\n");
+		  if (gCoapAcknowledgement_c == pSession->msgType)
+		   {
+			  shell_write("CON");
+
+		   }else if(gCoapNonConfirmable_c== pSession->msgType){
+			   shell_write("NON");
+		   }
+		  shell_write("\r\n");
+};
 #if(defined(LEADER)&&LEADER)
 static void myTaskTimerCallback(void *param)
 {
@@ -257,7 +274,17 @@ static void myTaskTimerCallback(void *param)
 	  COAP_CloseSession(pMySession);
 }
 #endif
-
+void print_data(char *data){
+   	   char centenas=(*data)/100;
+   	   char decenas=(*data-(centenas*100))/10;
+   	   char unidades=(*data-(centenas*100)-(decenas*10));
+   	   centenas+=48;
+   	   decenas+=48;
+   	   unidades+=48;
+   	   shell_printf("%c",centenas);
+   	   shell_printf("%c",decenas);
+   	   shell_printf("%c",unidades);
+}
 
 
 
@@ -320,6 +347,22 @@ uint32_t dataLen
 )
 
 {
+	char remoteAddrStr[INET6_ADDRSTRLEN];
+	ntop(AF_INET6, (ipAddr_t*)&pSession->remoteAddrStorage.ss_addr, remoteAddrStr, INET6_ADDRSTRLEN);
+	   shell_write("Counter =");
+	   	   	   print_data((char *)pData);
+	  		  shell_write("from :  ");
+	  		shell_printf(remoteAddrStr);
+	  		 shell_write("\r\n");
+		  if (gCoapAcknowledgement_c == pSession->msgType)
+		   {
+			  shell_write("CON");
+
+		   }else if(gCoapNonConfirmable_c== pSession->msgType){
+			   shell_write("NON");
+		   }
+		  shell_write("\r\n");
+
 }
 
 
