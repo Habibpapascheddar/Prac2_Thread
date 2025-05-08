@@ -79,6 +79,8 @@ Private macros
 #define APP_LED_URI_PATH                        "/led"
 #define APP_TEMP_URI_PATH                       "/temp"
 #define APP_SINK_URI_PATH                       "/sink"
+#define APP_ACCEL_URI_PATH                       "/accel"
+#define APP_ACCEL_ROUTER_URI_PATH                "/accel"
 #if LARGE_NETWORK
 #define APP_RESET_TO_FACTORY_URI_PATH           "/reset"
 #endif
@@ -121,6 +123,9 @@ static void APP_CoapLedCb(coapSessionStatus_t sessionStatus, uint8_t *pData, coa
 static void APP_CoapTempCb(coapSessionStatus_t sessionStatus, uint8_t *pData, coapSession_t *pSession, uint32_t dataLen);
 static void APP_CoapSinkCb(coapSessionStatus_t sessionStatus, uint8_t *pData, coapSession_t *pSession, uint32_t dataLen);
 static void App_RestoreLeaderLed(uint8_t *param);
+static void APP_CoapaccelCb(coapSessionStatus_t sessionStatus, void *pData, coapSession_t *pSession, uint32_t dataLen);
+static void APP_CoapaccelrouterCb(coapSessionStatus_t sessionStatus, void *pData, coapSession_t *pSession, uint32_t dataLen);
+
 #if LARGE_NETWORK
 static void APP_CoapResetToFactoryDefaultsCb(coapSessionStatus_t sessionStatus, uint8_t *pData, coapSession_t *pSession, uint32_t dataLen);
 static void APP_SendResetToFactoryCommand(uint8_t *param);
@@ -136,6 +141,10 @@ Public global variables declarations
 const coapUriPath_t gAPP_LED_URI_PATH  = {SizeOfString(APP_LED_URI_PATH), (uint8_t *)APP_LED_URI_PATH};
 const coapUriPath_t gAPP_TEMP_URI_PATH = {SizeOfString(APP_TEMP_URI_PATH), (uint8_t *)APP_TEMP_URI_PATH};
 const coapUriPath_t gAPP_SINK_URI_PATH = {SizeOfString(APP_SINK_URI_PATH), (uint8_t *)APP_SINK_URI_PATH};
+const coapUriPath_t gAPP_ACCEL_URI_PATH = {SizeOfString(APP_ACCEL_URI_PATH), (uint8_t *)APP_ACCEL_URI_PATH};
+const coapUriPath_t gAPP_ACCEL_ROUTER_URI_PATH = {SizeOfString(APP_ACCEL_ROUTER_URI_PATH), (uint8_t *)APP_ACCEL_ROUTER_URI_PATH};
+
+
 #if LARGE_NETWORK
 const coapUriPath_t gAPP_RESET_URI_PATH = {SizeOfString(APP_RESET_TO_FACTORY_URI_PATH), (uint8_t *)APP_RESET_TO_FACTORY_URI_PATH};
 #endif
@@ -249,6 +258,93 @@ void THR_read_accel()
 	            zAngle = 0;
 	        }
 
+}
+static void APP_CoapaccelCb
+(
+coapSessionStatus_t sessionStatus,
+void *pData,
+coapSession_t *pSession,
+uint32_t dataLen
+)
+
+{
+   uint8_t pMySessionPayload[3];
+  static uint32_t pMyPayloadSize=3;
+  coapSession_t *pMySession = NULL;
+  pMySession = COAP_OpenSession(mAppCoapInstId);
+  COAP_AddOptionToList(pMySession,COAP_URI_PATH_OPTION, APP_ACCEL_URI_PATH,SizeOfString(APP_ACCEL_URI_PATH));
+  THR_read_accel();
+  pMySessionPayload[0]=(char)xAngle;
+  pMySessionPayload[1]=(char)yAngle;
+  pMySessionPayload[2]=(char)zAngle;
+  char remoteAddrStr[INET6_ADDRSTRLEN];
+  	ntop(AF_INET6, (ipAddr_t*)&pSession->remoteAddrStorage.ss_addr, remoteAddrStr, INET6_ADDRSTRLEN);
+  if(gCoapGET_c==pSession->code){
+	  pMySession -> code= gCoapPOST_c;
+  }else
+	  pMySession -> code= gServiceUnavailable_c;
+    if (gCoapConfirmable_c == pSession->msgType)
+  {
+
+    if (gCoapFailure_c!=sessionStatus)
+    {
+      COAP_Send(pSession, gCoapMsgTypeAckSuccessChanged_c, pMySessionPayload, pMyPayloadSize);
+    }
+    shell_write("CON Accel data requested from:");
+		shell_printf(remoteAddrStr);
+    shell_write("\r\n");
+  }
+
+  else if(gCoapNonConfirmable_c == pSession->msgType)
+  {
+	  shell_write("NON Accel data requested from:");
+		shell_printf(remoteAddrStr);
+	  shell_write("\r\n");
+  }
+  //shell_writeN(pData, dataLen);
+  pMySession -> msgType=gCoapNonConfirmable_c;
+
+  pMySession -> pCallback =NULL;
+  FLib_MemCpy(&pMySession->remoteAddrStorage,&gCoapDestAddress,sizeof(ipAddr_t));
+ // COAP_SendMsg(pMySession,  pMySessionPayload, pMyPayloadSize);
+  COAP_Send(pMySession,pMySession -> msgType , pMySessionPayload, pMyPayloadSize );
+  COAP_CloseSession(pMySession);
+}
+
+static void APP_CoapaccelrouterCb
+(
+		coapSessionStatus_t sessionStatus,
+		void *pData,
+		coapSession_t *pSession,
+		uint32_t dataLen
+){
+	uint8_t *pMySessionPayload=&counter;
+	static uint32_t pMyPayloadSize=1;
+	coapSession_t *pMySession = NULL;
+
+	pMySession = COAP_OpenSession(mAppCoapInstId);
+	COAP_AddOptionToList(pMySession,COAP_URI_PATH_OPTION, APP_ACCEL_ROUTER_URI_PATH,SizeOfString(APP_ACCEL_ROUTER_URI_PATH));
+
+	char remoteAddrStr[INET6_ADDRSTRLEN];
+	ntop(AF_INET6, (ipAddr_t*)&pSession->remoteAddrStorage.ss_addr, remoteAddrStr, INET6_ADDRSTRLEN);
+
+	shell_printf(remoteAddrStr);
+	shell_write("\r\n");
+
+	if (gCoapConfirmable_c == pSession->msgType)
+	{
+		shell_write("CON request");
+		if (gCoapFailure_c!=sessionStatus)
+		{
+			COAP_Send(pSession, gCoapMsgTypeAckSuccessChanged_c, pMySessionPayload, pMyPayloadSize);
+		}
+	}
+
+	else if(gCoapNonConfirmable_c == pSession->msgType)
+	{
+		shell_write("CON request");
+	}
+	COAP_CloseSession(pMySession);
 }
 void APP_Init
 (
@@ -620,6 +716,8 @@ static void APP_InitCoapDemo
 {
     coapRegCbParams_t cbParams[] =  {{APP_CoapLedCb,  (coapUriPath_t *)&gAPP_LED_URI_PATH},
                                      {APP_CoapTempCb, (coapUriPath_t *)&gAPP_TEMP_URI_PATH},
+									 {APP_CoapaccelrouterCb, (coapUriPath_t*)&gAPP_ACCEL_ROUTER_URI_PATH},
+									 {APP_CoapaccelCb, (coapUriPath_t*)&gAPP_ACCEL_URI_PATH},
 #if LARGE_NETWORK
                                      {APP_CoapResetToFactoryDefaultsCb, (coapUriPath_t *)&gAPP_RESET_URI_PATH},
 #endif
