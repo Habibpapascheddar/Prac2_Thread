@@ -310,7 +310,6 @@ uint32_t dataLen
   COAP_Send(pMySession,pMySession -> msgType , pMySessionPayload, pMyPayloadSize );
   COAP_CloseSession(pMySession);
 }
-
 static void APP_CoapaccelrouterCb
 (
 		coapSessionStatus_t sessionStatus,
@@ -322,12 +321,51 @@ static void APP_CoapaccelrouterCb
 	static uint32_t pMyPayloadSize=1;
 	coapSession_t *pMySession = NULL;
 
+ 	if(pSession->code!=gCoapPOST_c){
+		shell_write("Service Unavailable \n");
+	}else{
 	pMySession = COAP_OpenSession(mAppCoapInstId);
-	COAP_AddOptionToList(pMySession,COAP_URI_PATH_OPTION, APP_ACCEL_ROUTER_URI_PATH,SizeOfString(APP_ACCEL_ROUTER_URI_PATH));
+	COAP_AddOptionToList(pMySession,COAP_URI_PATH_OPTION, APP_STOPTMR_ROUTER_URI_PATH,SizeOfString(APP_STOPTMR_ROUTER_URI_PATH));
 
 	char remoteAddrStr[INET6_ADDRSTRLEN];
 	ntop(AF_INET6, (ipAddr_t*)&pSession->remoteAddrStorage.ss_addr, remoteAddrStr, INET6_ADDRSTRLEN);
 
+//	char localAddrStr[INET6_ADDRSTRLEN];
+	//APP_GetLocalIPv6(localAddrStr); // Obtener IPv6 local
+
+
+	uint8_t x = ((uint8_t*)pData)[0];
+	uint8_t y = ((uint8_t*)pData)[1];
+	uint8_t z = ((uint8_t*)pData)[2];
+
+
+	BOARD_InitLEDs();
+
+	if(z == x && x == y){
+		LED_Operate(LED2, gLedOn_c);
+		LED_Operate(LED4, gLedOn_c);
+		LED_Operate(LED3, gLedOn_c);
+	}else if(z >= x && z >= y){
+		LED_Operate(LED2, gLedOn_c);
+		LED_Operate(LED4, gLedOff_c);
+		LED_Operate(LED3, gLedOff_c);
+	}else if (x >= y && x >= z){
+		LED_Operate(LED2, gLedOff_c);
+		LED_Operate(LED4, gLedOn_c);
+		LED_Operate(LED3, gLedOff_c);
+	}else {
+		LED_Operate(LED2, gLedOff_c);
+		LED_Operate(LED4, gLedOff_c);
+		LED_Operate(LED3, gLedOn_c);
+	}
+
+	shell_write("X =");
+	print_data((char *)pData);
+	shell_write("Y =");
+	print_data((char *)(pData+1));
+	shell_write("Z =");
+	print_data((char *)(pData+2));
+	shell_write("from");
 	shell_printf(remoteAddrStr);
 	shell_write("\r\n");
 
@@ -344,7 +382,47 @@ static void APP_CoapaccelrouterCb
 	{
 		shell_write("CON request");
 	}
-	COAP_CloseSession(pMySession);
+	COAP_CloseSession(pMySession);}
+}
+static void APP_CoapRestartTMRrouterCb
+(
+coapSessionStatus_t sessionStatus,
+void *pData,
+coapSession_t *pSession,
+uint32_t dataLen
+){
+	   uint8_t *pMySessionPayload=&counter;
+	  static uint32_t pMyPayloadSize=1;
+	coapSession_t *pMySession = NULL;
+	  pMySession = COAP_OpenSession(mAppCoapInstId);
+	  COAP_AddOptionToList(pMySession,COAP_URI_PATH_OPTION, APP_STOPTMR_ROUTER_URI_PATH,SizeOfString(APP_STOPTMR_ROUTER_URI_PATH));
+
+	shell_write("Timer started from  ");
+	  char remoteAddrStr[INET6_ADDRSTRLEN];
+	  	ntop(AF_INET6, (ipAddr_t*)&pSession->remoteAddrStorage.ss_addr, remoteAddrStr, INET6_ADDRSTRLEN);
+		shell_printf(remoteAddrStr);
+		 shell_write("\r\n");
+		  if (gCoapConfirmable_c == pSession->msgType)
+		  {
+
+		    if (gCoapFailure_c!=sessionStatus)
+		    {
+		      COAP_Send(pSession, gCoapMsgTypeAckSuccessChanged_c, pMySessionPayload, pMyPayloadSize);
+		    }
+		    shell_write(" type CON");
+
+		  }
+
+		  else if(gCoapNonConfirmable_c == pSession->msgType)
+		  {
+			  shell_write(" type NON");
+
+		  }
+		    shell_write("\r\n");
+		    shell_write(" Count= ");
+		    print_data((char *)pData);
+		    shell_write("\r\n");
+		    COAP_CloseSession(pMySession);
 }
 void APP_Init
 (
