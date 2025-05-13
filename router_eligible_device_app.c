@@ -231,6 +231,47 @@ uint32_t dataLen
   COAP_CloseSession(pMySession);
 }
 
+static void APP_CoapStopTMRrouterCb
+(
+coapSessionStatus_t sessionStatus,
+void *pData,
+coapSession_t *pSession,
+uint32_t dataLen
+){
+	   uint8_t *pMySessionPayload=&counter;
+	  static uint32_t pMyPayloadSize=1;
+	coapSession_t *pMySession = NULL;
+	  pMySession = COAP_OpenSession(mAppCoapInstId);
+	  COAP_AddOptionToList(pMySession,COAP_URI_PATH_OPTION, APP_STOPTMR_ROUTER_URI_PATH,SizeOfString(APP_STOPTMR_ROUTER_URI_PATH));
+	  shell_write("Timer stopped  from ");
+	  char remoteAddrStr[INET6_ADDRSTRLEN];
+	  	ntop(AF_INET6, (ipAddr_t*)&pSession->remoteAddrStorage.ss_addr, remoteAddrStr, INET6_ADDRSTRLEN);
+		shell_printf(remoteAddrStr);
+		   if (gCoapConfirmable_c == pSession->msgType)
+		  {
+
+		    if (gCoapFailure_c!=sessionStatus)
+		    {
+		      COAP_Send(pSession, gCoapMsgTypeAckSuccessChanged_c, pMySessionPayload, pMyPayloadSize);
+		    }
+		    shell_write(" type CON");
+
+		  }
+
+		  else if(gCoapNonConfirmable_c == pSession->msgType)
+		  {
+			  shell_write(" type NON");
+
+		  }
+		    shell_write("\r\n");
+		    shell_write(" Count= ");
+		    print_data((char *)pData);
+		    shell_write("\r\n");
+		    COAP_CloseSession(pMySession);
+}
+
+
+
 void APP_Init
 (
     void
@@ -546,7 +587,8 @@ static void APP_InitCoapDemo
 #if LARGE_NETWORK
                                      {APP_CoapResetToFactoryDefaultsCb, (coapUriPath_t *)&gAPP_RESET_URI_PATH},
 #endif
-                                     {APP_CoapSinkCb, (coapUriPath_t *)&gAPP_SINK_URI_PATH}};
+									 {APP_CoapStopTMRrouterCb, (coapUriPath_t*)&gAPP_STOPTMR_ROUTER_URI_PATH},
+									 {APP_CoapSinkCb, (coapUriPath_t *)&gAPP_SINK_URI_PATH}};
     /* Register Services in COAP */
     sockaddrStorage_t coapParams = {0};
 
