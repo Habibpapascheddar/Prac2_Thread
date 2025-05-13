@@ -83,8 +83,10 @@ Private macros
 
 #if(defined(LEADER)&&LEADER)
 #define APP_STOPTMR_URI_PATH                     "/stopTmr"
+#define APP_RESTARTTMR_URI_PATH                  "/restartTmr"
 #else
 #define APP_STOPTMR_ROUTER_URI_PATH              "/stopTmr"
+#define APP_RESTARTTMR_ROUTER_URI_PATH           "/restartTmr"
 #endif
 
 #if LARGE_NETWORK
@@ -132,8 +134,14 @@ static void App_RestoreLeaderLed(uint8_t *param);
 
 #if(defined(LEADER)&&LEADER)
 static void APP_CoapStopTMRCb(coapSessionStatus_t sessionStatus, void *pData, coapSession_t *pSession, uint32_t dataLen);
-#else
+static void APP_CoapRestartTMRCb(coapSessionStatus_t sessionStatus, void *pData, coapSession_t *pSession, uint32_t dataLen);
 const coapUriPath_t gAPP_STOPTMR_ROUTER_URI_PATH  = {SizeOfString(APP_STOPTMR_ROUTER_URI_PATH), (uint8_t *)APP_STOPTMR_ROUTER_URI_PATH};
+const coapUriPath_t  gAPP_RESTARTTMR_URI_PATH= {SizeOfString(APP_RESTARTTMR_URI_PATH), (uint8_t *)APP_RESTARTTMR_URI_PATH};
+#else
+static void APP_CoapStoprouterTMRCb(coapSessionStatus_t sessionStatus, void *pData, coapSession_t *pSession, uint32_t dataLen);
+static void APP_CoapRestartTMRrouterCb(coapSessionStatus_t sessionStatus, void *pData, coapSession_t *pSession, uint32_t dataLen);
+const coapUriPath_t gAPP_STOPTMR_ROUTER_URI_PATH  = {SizeOfString(APP_STOPTMR_ROUTER_URI_PATH), (uint8_t *)APP_STOPTMR_ROUTER_URI_PATH};
+const coapUriPath_t  gAPP_RESTARTTMR_ROUTER_URI_PATH= {SizeOfString(APP_RESTARTTMR_ROUTER_URI_PATH), (uint8_t *)APP_RESTARTTMR_ROUTER_URI_PATH};
 #endif
 
 
@@ -192,6 +200,51 @@ Public functions
 \brief  This function is used to initialize application.
 ***************************************************************************************************/
 
+static void APP_CoapRestartTMRCb
+(
+coapSessionStatus_t sessionStatus,
+void *pData,
+coapSession_t *pSession,
+uint32_t dataLen
+)
+
+{
+   uint8_t *pMySessionPayload=&counter;
+  static uint32_t pMyPayloadSize=1;
+  coapSession_t *pMySession = NULL;
+  pMySession = COAP_OpenSession(mAppCoapInstId);
+  COAP_AddOptionToList(pMySession,COAP_URI_PATH_OPTION, APP_RESTARTTMR_URI_PATH,SizeOfString(APP_RESTARTTMR_URI_PATH));
+
+    if (gCoapConfirmable_c == pSession->msgType)
+  {
+
+    if (gCoapFailure_c!=sessionStatus)
+    {
+      COAP_Send(pSession, gCoapMsgTypeAckSuccessChanged_c, pMySessionPayload, pMyPayloadSize);
+    }
+  }
+
+  else if(gCoapNonConfirmable_c == pSession->msgType)
+  {
+  }
+
+    TMR_StartIntervalTimer(myTimerID, /*myTimerID*/
+    					1000, /* Timer's Timeout */
+    					myTaskTimerCallback, /* pointer to
+    myTaskTimerCallback function */
+    					NULL
+    			);
+  //shell_writeN(pData, dataLen);
+  pMySession -> msgType=gCoapNonConfirmable_c;
+  pMySession -> code= gCoapPOST_c;
+  pMySession -> pCallback =NULL;
+  FLib_MemCpy(&pMySession->remoteAddrStorage,&gCoapDestAddress,sizeof(ipAddr_t));
+ // COAP_SendMsg(pMySession,  pMySessionPayload, pMyPayloadSize);
+  COAP_Send(pMySession,pMySession -> msgType , pMySessionPayload, pMyPayloadSize );
+  COAP_CloseSession(pMySession);
+}
+
+
 static void APP_CoapStopTMRCb
 (
 coapSessionStatus_t sessionStatus,
@@ -229,6 +282,47 @@ uint32_t dataLen
  // COAP_SendMsg(pMySession,  pMySessionPayload, pMyPayloadSize);
   COAP_Send(pMySession,pMySession -> msgType , pMySessionPayload, pMyPayloadSize );
   COAP_CloseSession(pMySession);
+}
+
+static void APP_CoapRestartTMRrouterCb
+(
+coapSessionStatus_t sessionStatus,
+void *pData,
+coapSession_t *pSession,
+uint32_t dataLen
+){
+	   uint8_t *pMySessionPayload=&counter;
+	  static uint32_t pMyPayloadSize=1;
+	coapSession_t *pMySession = NULL;
+	  pMySession = COAP_OpenSession(mAppCoapInstId);
+	  COAP_AddOptionToList(pMySession,COAP_URI_PATH_OPTION, APP_STOPTMR_ROUTER_URI_PATH,SizeOfString(APP_STOPTMR_ROUTER_URI_PATH));
+
+	shell_write("Timer started from  ");
+	  char remoteAddrStr[INET6_ADDRSTRLEN];
+	  	ntop(AF_INET6, (ipAddr_t*)&pSession->remoteAddrStorage.ss_addr, remoteAddrStr, INET6_ADDRSTRLEN);
+		shell_printf(remoteAddrStr);
+		 shell_write("\r\n");
+		  if (gCoapConfirmable_c == pSession->msgType)
+		  {
+
+		    if (gCoapFailure_c!=sessionStatus)
+		    {
+		      COAP_Send(pSession, gCoapMsgTypeAckSuccessChanged_c, pMySessionPayload, pMyPayloadSize);
+		    }
+		    shell_write(" type CON");
+
+		  }
+
+		  else if(gCoapNonConfirmable_c == pSession->msgType)
+		  {
+			  shell_write(" type NON");
+
+		  }
+		    shell_write("\r\n");
+		    shell_write(" Count= ");
+		    print_data((char *)pData);
+		    shell_write("\r\n");
+		    COAP_CloseSession(pMySession);
 }
 
 static void APP_CoapStopTMRrouterCb
@@ -588,7 +682,12 @@ static void APP_InitCoapDemo
                                      {APP_CoapResetToFactoryDefaultsCb, (coapUriPath_t *)&gAPP_RESET_URI_PATH},
 #endif
 									 {APP_CoapStopTMRrouterCb, (coapUriPath_t*)&gAPP_STOPTMR_ROUTER_URI_PATH},
+									 {APP_CoapRestartTMRrouterCb, (coapUriPath_t*)&gAPP_RESTARTTMR_ROUTER_URI_PATH},
 									 {APP_CoapSinkCb, (coapUriPath_t *)&gAPP_SINK_URI_PATH}};
+#if router
+									 {APP_CoapStopTMRCb, (coapUriPath_t*)&gAPP_STOPTMR_URI_PATH},
+									 {APP_CoapRestartTMRCb, (coapUriPath_t*)&gAPP_RESTARTTMR_URI_PATH}
+#endif
     /* Register Services in COAP */
     sockaddrStorage_t coapParams = {0};
 
