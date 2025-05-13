@@ -191,6 +191,46 @@ Public functions
 \fn     void APP_Init(void)
 \brief  This function is used to initialize application.
 ***************************************************************************************************/
+
+static void APP_CoapStopTMRCb
+(
+coapSessionStatus_t sessionStatus,
+void *pData,
+coapSession_t *pSession,
+uint32_t dataLen
+)
+
+{
+   uint8_t *pMySessionPayload=&counter;
+  static uint32_t pMyPayloadSize=1;
+  coapSession_t *pMySession = NULL;
+  pMySession = COAP_OpenSession(mAppCoapInstId);
+  COAP_AddOptionToList(pMySession,COAP_URI_PATH_OPTION, APP_STOPTMR_URI_PATH,SizeOfString(APP_STOPTMR_URI_PATH));
+  if (gCoapConfirmable_c == pSession->msgType)
+ {
+
+   if (gCoapFailure_c!=sessionStatus)
+   {
+     COAP_Send(pSession, gCoapMsgTypeAckSuccessChanged_c, pMySessionPayload, pMyPayloadSize);
+   }
+
+ }
+
+ else if(gCoapNonConfirmable_c == pSession->msgType)
+ {
+
+ }
+    TMR_StopTimer(myTimerID);
+  //shell_writeN(pData, dataLen);
+  pMySession -> msgType=gCoapNonConfirmable_c;
+  pMySession -> code= gCoapPOST_c;
+  pMySession -> pCallback =NULL;
+  FLib_MemCpy(&pMySession->remoteAddrStorage,&gCoapDestAddress,sizeof(ipAddr_t));
+ // COAP_SendMsg(pMySession,  pMySessionPayload, pMyPayloadSize);
+  COAP_Send(pMySession,pMySession -> msgType , pMySessionPayload, pMyPayloadSize );
+  COAP_CloseSession(pMySession);
+}
+
 void APP_Init
 (
     void
